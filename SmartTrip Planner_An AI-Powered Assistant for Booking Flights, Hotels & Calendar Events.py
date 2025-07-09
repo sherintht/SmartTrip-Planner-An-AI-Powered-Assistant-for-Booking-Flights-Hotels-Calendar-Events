@@ -1,176 +1,124 @@
-import streamlit as st
-import datetime
-import json
-import sqlite3
-import os
+import React, { useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { format } from "date-fns";
 
-# ---- Mock API Clients ----
+export default function TripPlanner() {
+  const [startDate, setStartDate] = useState("2025-07-20");
+  const [tripDuration, setTripDuration] = useState(3);
+  const [status, setStatus] = useState("");
+  const [results, setResults] = useState(null);
 
-def FlightBookingAPI(origin, destination, date, flight_class, passengers):
-    return {
-        "success": True,
-        "flight": {
-            "origin": origin,
-            "destination": destination,
-            "date": date,
-            "class": flight_class,
-            "passengers": passengers,
-            "flight_number": "UA123",
-            "departure_time": f"{date}T09:00:00",
-            "arrival_time": f"{date}T12:00:00",
-            "booking_reference": "FLIGHT-BOOKED-001"
-        }
-    }
+  const bookTrip = async () => {
+    setStatus("Booking your flight...");
 
-def HotelBookingAPI(city, checkin, checkout, stars, amenities):
-    return {
-        "success": True,
-        "hotel": {
-            "name": "Grand San Francisco Hotel",
-            "city": city,
-            "checkin": checkin,
-            "checkout": checkout,
-            "stars": stars,
-            "amenities": amenities,
-            "booking_reference": "HOTEL-BOOKED-001"
-        }
-    }
+    const flight = await FlightBookingAPI({
+      origin: "New York",
+      destination: "San Francisco",
+      date: startDate,
+      class: "economy",
+      passengers: 1,
+    });
 
-def GoogleCalendarAPI_create_event(title, date_time_start, date_time_end, location, attendees):
-    return {
-        "success": True,
-        "event": {
-            "title": title,
-            "start": date_time_start,
-            "end": date_time_end,
-            "location": location,
-            "attendees": attendees,
-            "calendar_event_id": "CAL-EVENT-001"
-        }
-    }
+    const checkin = startDate;
+    const checkout = format(
+      new Date(new Date(startDate).getTime() + (tripDuration - 1) * 24 * 60 * 60 * 1000),
+      "yyyy-MM-dd"
+    );
 
-# ---- Core Workflow Function ----
+    setStatus("Booking your hotel...");
+    const hotel = await HotelBookingAPI({
+      city: "San Francisco",
+      checkin,
+      checkout,
+      stars: 4,
+      amenities: ["WiFi", "business center"],
+    });
 
-def plan_business_trip(
-    origin,
-    destination,
-    start_date,
-    trip_days,
-    flight_class="Economy",
-    passengers=1,
-    hotel_stars=4,
-    hotel_amenities=None,
-    calendar_attendees=None
-):
-    reasoning_steps = []
-    output = {}
+    setStatus("Creating calendar event...");
+    const calendar = await GoogleCalendarAPI.create_event({
+      title: "Business Trip to San Francisco",
+      date_time_start: `${startDate}T08:00:00`,
+      date_time_end: `${checkout}T20:00:00`,
+      location: "San Francisco, CA",
+      attendees: [],
+    });
 
-    # Step 1: Book Flight
-    reasoning_steps.append("Step 1: Book a flight.")
-    flight_result = FlightBookingAPI(origin, destination, start_date, flight_class, passengers)
-    output['flight_booking'] = flight_result
-    if not flight_result['success']:
-        reasoning_steps.append("Flight booking failed.")
-        return {"reasoning": reasoning_steps, "output": output}
+    setResults({ flight, hotel, calendar });
+    setStatus("Trip booked successfully!");
+  };
 
-    # Step 2: Book Hotel
-    checkin_date = start_date
-    checkout_date = (datetime.datetime.strptime(start_date, "%Y-%m-%d") + datetime.timedelta(days=trip_days)).strftime("%Y-%m-%d")
-    reasoning_steps.append("Step 2: Book hotel.")
-    hotel_result = HotelBookingAPI(destination, checkin_date, checkout_date, hotel_stars, hotel_amenities or ["WiFi", "Breakfast"])
-    output['hotel_booking'] = hotel_result
-    if not hotel_result['success']:
-        reasoning_steps.append("Hotel booking failed.")
-        return {"reasoning": reasoning_steps, "output": output}
+  return (
+    <div className="p-6 max-w-2xl mx-auto">
+      <Card className="mb-4">
+        <CardContent>
+          <h2 className="text-xl font-bold mb-4">Book Business Trip</h2>
+          <div className="mb-2">
+            <Label>Start Date</Label>
+            <Input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
+          </div>
+          <div className="mb-4">
+            <Label>Trip Duration (days)</Label>
+            <Input
+              type="number"
+              value={tripDuration}
+              onChange={(e) => setTripDuration(Number(e.target.value))}
+            />
+          </div>
+          <Button onClick={bookTrip}>Book My Trip</Button>
+        </CardContent>
+      </Card>
 
-    # Step 3: Calendar Event
-    reasoning_steps.append("Step 3: Create calendar event.")
-    event_title = f"Trip: {origin} to {destination}"
-    departure_time = flight_result['flight']['departure_time']
-    return_time = checkout_date + "T23:59:00"
-    location = hotel_result['hotel']['name'] + ", " + destination
-    calendar_result = GoogleCalendarAPI_create_event(event_title, departure_time, return_time, location, calendar_attendees or [])
-    output['calendar_event'] = calendar_result
+      {status && <p className="mb-4">{status}</p>}
 
-    if not calendar_result['success']:
-        reasoning_steps.append("Calendar event failed.")
-        return {"reasoning": reasoning_steps, "output": output}
+      {results && (
+        <Card>
+          <CardContent>
+            <h3 className="text-lg font-semibold">Booking Summary</h3>
+            <ul className="list-disc list-inside mt-2">
+              <li>Flight: {results.flight.details}</li>
+              <li>Hotel: {results.hotel.details}</li>
+              <li>Calendar: {results.calendar.status}</li>
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
 
-    reasoning_steps.append("All steps completed successfully.")
-    return {"reasoning": reasoning_steps, "output": output}
+// Dummy APIs
+async function FlightBookingAPI({ origin, destination, date, class: cls, passengers }) {
+  return new Promise((res) =>
+    setTimeout(() =>
+      res({
+        details: `${cls} flight from ${origin} to ${destination} on ${date} for ${passengers} passenger(s)`
+      }), 1000)
+  );
+}
 
-# ---- Save to JSON file and SQLite ----
+async function HotelBookingAPI({ city, checkin, checkout, stars, amenities }) {
+  return new Promise((res) =>
+    setTimeout(() =>
+      res({
+        details: `${stars}-star hotel in ${city} from ${checkin} to ${checkout} with ${amenities.join(", ")}`
+      }), 1000)
+  );
+}
 
-def save_to_file(data, filename="trip_booking.json"):
-    with open(filename, "w") as f:
-        json.dump(data, f, indent=2)
-
-def save_to_db(data):
-    conn = sqlite3.connect("bookings.db")
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS bookings
-                 (flight TEXT, hotel TEXT, calendar TEXT, timestamp TEXT)''')
-    c.execute("INSERT INTO bookings VALUES (?, ?, ?, datetime('now'))",
-              (json.dumps(data['output'].get('flight_booking')),
-               json.dumps(data['output'].get('hotel_booking')),
-               json.dumps(data['output'].get('calendar_event'))))
-    conn.commit()
-    conn.close()
-
-# ---- Streamlit UI ----
-
-st.set_page_config(page_title="SmartTrip Planner", layout="centered")
-
-st.markdown(
-    """
-    <h1 style='text-align: center; font-size: 2.8em;'>✈️ SmartTrip Planner</h1>
-    <h4 style='text-align: center; color: gray;'>An AI-Powered Travel Assistant for Flights, Hotels & Calendar</h4>
-    """,
-    unsafe_allow_html=True
-)
-
-st.caption("Plan your full trip with one click — from booking flights and hotels to blocking your calendar.")
-
-with st.form("trip_form"):
-    st.markdown("### 📝 Enter Your Trip Details")
-    origin = st.text_input("From", "New York")
-    destination = st.text_input("To", "San Francisco")
-    start_date = st.date_input("Trip Start Date", datetime.date.today())
-    days = st.slider("Trip Duration (days)", 1, 10, 3)
-    submit = st.form_submit_button("🛫 Plan My Trip")
-
-if submit:
-    result = plan_business_trip(
-        origin=origin,
-        destination=destination,
-        start_date=start_date.strftime("%Y-%m-%d"),
-        trip_days=days
-    )
-
-    st.markdown("## 📋 Reasoning Trace")
-    for step in result['reasoning']:
-        st.success(step)
-
-    st.markdown("## ✈️ Flight Details")
-    flight = result['output']['flight_booking']['flight']
-    st.write(f"**From:** {flight['origin']} → **To:** {flight['destination']}")
-    st.write(f"**Date:** {flight['date']}")
-    st.write(f"**Flight No:** {flight['flight_number']}")
-    st.write(f"**Departure:** {flight['departure_time']} → **Arrival:** {flight['arrival_time']}")
-    st.write(f"**Class:** {flight['class']} | **Passengers:** {flight['passengers']}")
-
-    st.markdown("## 🏨 Hotel Details")
-    hotel = result['output']['hotel_booking']['hotel']
-    st.write(f"**Hotel:** {hotel['name']}, {hotel['city']}")
-    st.write(f"**Check-in:** {hotel['checkin']} → **Check-out:** {hotel['checkout']}")
-    st.write(f"**Stars:** {hotel['stars']} | **Amenities:** {', '.join(hotel['amenities'])}")
-
-    st.markdown("## 📅 Calendar Event")
-    event = result['output']['calendar_event']['event']
-    st.write(f"**Event Title:** {event['title']}")
-    st.write(f"**Start:** {event['start']} → **End:** {event['end']}")
-    st.write(f"**Location:** {event['location']}")
-
-    save_to_file(result)
-    save_to_db(result)
-    st.success("✅ Trip details saved to file and database.")
+const GoogleCalendarAPI = {
+  create_event: async ({ title, date_time_start, date_time_end, location }) => {
+    return new Promise((res) =>
+      setTimeout(() =>
+        res({ status: `Event '${title}' created from ${date_time_start} to ${date_time_end} at ${location}` }),
+        1000
+      )
+    );
+  },
+};
