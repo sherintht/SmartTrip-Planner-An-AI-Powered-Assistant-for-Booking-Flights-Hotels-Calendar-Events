@@ -1,5 +1,3 @@
-# SmartTrip Planner: AI Travel Assistant with Streamlit UI and Local Storage
-
 import streamlit as st
 import datetime
 import json
@@ -134,11 +132,12 @@ st.markdown(
 st.caption("Plan your full trip with one click — from booking flights and hotels to blocking your calendar.")
 
 with st.form("trip_form"):
+    st.markdown("### 📝 Enter Your Trip Details")
     origin = st.text_input("From", "New York")
     destination = st.text_input("To", "San Francisco")
     start_date = st.date_input("Trip Start Date", datetime.date.today())
     days = st.slider("Trip Duration (days)", 1, 10, 3)
-    submit = st.form_submit_button("Plan My Trip")
+    submit = st.form_submit_button("🛫 Plan My Trip")
 
 if submit:
     result = plan_business_trip(
@@ -148,18 +147,29 @@ if submit:
         trip_days=days
     )
 
-    st.subheader("🧾 Reasoning Trace")
+    st.markdown("## 📋 Reasoning Trace")
     for step in result['reasoning']:
-        st.markdown(f"- {step}")
+        st.success(step)
 
-    st.subheader("✈️ Flight Details")
-    st.write(result['output']['flight_booking']['flight'])
+    st.markdown("## ✈️ Flight Details")
+    flight = result['output']['flight_booking']['flight']
+    st.write(f"**From:** {flight['origin']} → **To:** {flight['destination']}")
+    st.write(f"**Date:** {flight['date']}")
+    st.write(f"**Flight No:** {flight['flight_number']}")
+    st.write(f"**Departure:** {flight['departure_time']} → **Arrival:** {flight['arrival_time']}")
+    st.write(f"**Class:** {flight['class']} | **Passengers:** {flight['passengers']}")
 
-    st.subheader("🏨 Hotel Details")
-    st.write(result['output']['hotel_booking']['hotel'])
+    st.markdown("## 🏨 Hotel Details")
+    hotel = result['output']['hotel_booking']['hotel']
+    st.write(f"**Hotel:** {hotel['name']}, {hotel['city']}")
+    st.write(f"**Check-in:** {hotel['checkin']} → **Check-out:** {hotel['checkout']}")
+    st.write(f"**Stars:** {hotel['stars']} | **Amenities:** {', '.join(hotel['amenities'])}")
 
-    st.subheader("📅 Calendar Event")
-    st.write(result['output']['calendar_event']['event'])
+    st.markdown("## 📅 Calendar Event")
+    event = result['output']['calendar_event']['event']
+    st.write(f"**Event Title:** {event['title']}")
+    st.write(f"**Start:** {event['start']} → **End:** {event['end']}")
+    st.write(f"**Location:** {event['location']}")
 
     save_to_file(result)
     save_to_db(result)
